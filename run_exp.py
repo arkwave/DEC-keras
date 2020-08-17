@@ -6,7 +6,7 @@ from keras.initializers import VarianceScaling
 import numpy as np
 
 
-def run(db='imagenet', trials=5):
+def run(db='imagenet', trials=2):
     expdir='results/exp1'
     if not os.path.exists(expdir):
         os.mkdir(expdir)
@@ -61,6 +61,7 @@ def run(db='imagenet', trials=5):
     baseline = np.zeros(shape=(trials, 3))
     metrics0=[]
     metrics1=[]
+    models = []
     for i in range(trials):  # base
         save_dir = os.path.join(save_db_dir, 'trial%d' % i)
         if not os.path.exists(save_dir):
@@ -74,7 +75,7 @@ def run(db='imagenet', trials=5):
         dec.fit(x, y=y,
                 update_interval=update_interval,
                 save_dir=save_dir)
-
+        models.append(dec)
         log = open(os.path.join(save_dir, 'dec_log.csv'), 'r')
         reader = csv.DictReader(log)
         metrics = []
@@ -83,6 +84,7 @@ def run(db='imagenet', trials=5):
         metrics0.append(metrics[0])
         metrics1.append(metrics[-1])
         log.close()
+
 
     metrics0, metrics1 = np.asarray(metrics0, dtype=float), np.asarray(metrics1, dtype=float)
     for t, line in enumerate(metrics0):
@@ -93,3 +95,4 @@ def run(db='imagenet', trials=5):
     logwriter.writerow(dict(trials=' ', acc=np.mean(metrics1, 0)[0], nmi=np.mean(metrics1, 0)[1], ari=np.mean(metrics1, 0)[2]))
 
     logfile.close()
+    return models, x, y
