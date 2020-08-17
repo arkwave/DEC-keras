@@ -1,4 +1,9 @@
 import numpy as np
+import cv2
+import os
+from skimage.feature import hog
+import multiprocessing as mp
+from sklearn.model_selection import train_test_split
 
 
 def extract_vgg16_features(x):
@@ -16,7 +21,7 @@ def extract_vgg16_features(x):
     # feature_model = Model(model.input, add_layer(model.output))
     feature_model = Model(model.input, model.get_layer('fc1').output)
     print('extracting features...')
-    x = np.asarray([img_to_array(array_to_img(im, scale=False).resize((im_h,im_h))) for im in x])
+    x = np.asarray([img_to_array(array_to_img(im, scale=False).resize((im_h, im_h))) for im in x])
     x = preprocess_input(x)  # data - 127. #data/255.#
     features = feature_model.predict(x)
     print('Features shape = ', features.shape)
@@ -309,6 +314,89 @@ def load_stl(data_path='./data/stl'):
     return features, y
 
 
+def load_imagenet(img_size=(32, 32, 3)):
+    X, Y = get_images(img_size)
+    data, labels, trainX, testX, trainY, testY = process_data(X, Y, composite=False)
+
+    return X, Y
+
+
+def read_image(args):
+    path, color = args 
+    if not color:
+        return cv2.imread(path, 0)
+    else:
+        return cv2.imread(path)
+
+
+def fetch_and_resize(tags, size=(32, 32), hogify=False):
+    filepath = 'drive/My Drive/datasets/'
+    full_data = []
+    full_labels = []
+    color = True if len(size) > 2 else False  
+    for tag in tags:
+        print('processing %s images' % tag)
+        dir = filepath + tag
+        all_files = [dir + '/' + file_ for file_ in os.listdir(dir)]
+        color_args = [color] * len(all_files)
+        input_ = list(zip(all_files, color_args))
+        print('reading...', end="")
+        pool_ = mp.Pool()
+        images = pool_.map(read_image, input_)
+        data = [cv2.resize(img, (size[0], size[1])) for img in images]
+        if hogify:
+            data = [hog(dat, feature_vector=True, multichannel=None) for dat in data]
+        print('done.')
+        labels = [tag] * len(data)
+        full_data.extend(data)
+        full_labels.extend(labels)
+    full_data = np.array(full_data)
+    full_labels = np.array(full_labels) 
+    return full_data, full_labels
+
+
+def get_images(img_size=(32, 32, 3)):
+    tags = ['dog', 'cat', 'snake', 'lizard']
+    data, labels = fetch_and_resize(tags, size=img_size, hogify=True)
+    labels = np.array(labels)
+    labels[np.where(labels == 'dog')[0]] = 0 
+    labels[np.where(labels == 'cat')[0]] = 1
+    labels[np.where(labels == 'snake')[0]] = 2
+    labels[np.where(labels == 'lizard')[0]] = 3
+    return data, labels
+
+
+def process_data(data, labels, composite=False, split_size=0.25):
+    mammals = ['dog', 'cat', 'bovine', 'deer', 'horses']
+    reptile = ['snake', 'lizard']
+    Y = labels
+    X = data 
+    trainX, testX, trainLabels, testLabels = train_test_split(X, Y, test_size=split_size, shuffle=True, stratify=Y)
+
+    # composite labels
+    if composite:
+        print("using composite labels")
+        trainY = np.zeros(trainLabels.shape)
+        trainY[np.where(np.isin(trainLabels, mammals))[0]] = 1
+        trainY[np.where(np.isin(trainLabels, reptile))[0]] = 0
+
+        testY = np.zeros(len(testLabels))
+        testY[np.where(np.isin(testLabels, mammals))[0]] = 1
+        testY[np.where(np.isin(testLabels, reptile))[0]] = 0 
+    else:
+        # individual labels
+        print("using individual labels")
+        trainY = trainLabels
+        testY = testLabels
+    
+    print('trainX shape: ', trainX.shape)
+    print('trainY shape: ', trainY.shape)
+    print('testX shape: ', testX.shape)
+    print('testY shape:', testY.shape)
+    
+    return data, labels, trainX, testX, trainY, testY
+
+
 def load_data(dataset_name):
     if dataset_name == 'mnist':
         return load_mnist()
@@ -322,6 +410,8 @@ def load_data(dataset_name):
         return load_reuters()
     elif dataset_name == 'stl':
         return load_stl()
+    elif dataset_name == 'imagenet':
+        return load_imagenet()
     else:
         print('Not defined for loading', dataset_name)
         exit(0)

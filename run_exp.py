@@ -1,20 +1,21 @@
 from DEC import DEC
-import os, csv
-import datasets
+import os
+import csv
 from keras.optimizers import SGD
 from keras.initializers import VarianceScaling
 import numpy as np
 
-expdir='./results/exp1'
-if not os.path.exists(expdir):
-    os.mkdir(expdir)
 
-logfile = open(expdir + '/results.csv', 'a')
-logwriter = csv.DictWriter(logfile, fieldnames=['trials', 'acc', 'nmi', 'ari'])
-logwriter.writeheader()
+def run(db='imagenet', trials=5):
+    expdir='results/exp1'
+    if not os.path.exists(expdir):
+        os.mkdir(expdir)
 
-trials=10
-for db in ['usps', 'reuters10k', 'stl', 'mnist', 'fmnist']:
+    logfile = open(expdir + '/results.csv', 'a')
+    logwriter = csv.DictWriter(logfile, fieldnames=['trials', 'acc', 'nmi', 'ari'])
+    logwriter.writeheader()
+
+    # for db in ['usps', 'reuters10k', 'stl', 'mnist', 'fmnist']:
     logwriter.writerow(dict(trials=db, acc='', nmi='', ari=''))
     save_db_dir = os.path.join(expdir, db)
     if not os.path.exists(save_db_dir):
@@ -48,6 +49,10 @@ for db in ['usps', 'reuters10k', 'stl', 'mnist', 'fmnist']:
         update_interval = 30
         pretrain_epochs = 10
 
+    elif db == 'imagenet':
+        update_interval = 140
+        pretrain_epochs = 300
+
     # prepare model
     dims = [x.shape[-1], 500, 500, 2000, 10]
 
@@ -61,7 +66,7 @@ for db in ['usps', 'reuters10k', 'stl', 'mnist', 'fmnist']:
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
-        dec = DEC(dims=[x.shape[-1], 500, 500, 2000, 10], n_clusters=n_clusters, init=init)
+        dec = DEC(dims=dims, n_clusters=n_clusters, init=init)
         dec.pretrain(x=x, y=y, optimizer=pretrain_optimizer,
                      epochs=pretrain_epochs,
                      save_dir=save_dir)
@@ -87,4 +92,4 @@ for db in ['usps', 'reuters10k', 'stl', 'mnist', 'fmnist']:
         logwriter.writerow(dict(trials=t, acc=line[0], nmi=line[1], ari=line[2]))
     logwriter.writerow(dict(trials=' ', acc=np.mean(metrics1, 0)[0], nmi=np.mean(metrics1, 0)[1], ari=np.mean(metrics1, 0)[2]))
 
-logfile.close()
+    logfile.close()
